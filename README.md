@@ -15,13 +15,15 @@ is required.
   the FinOps option uses the **terminal UI**, not the former WPF scanner.
 - An existing [ALZ AutoPilot](https://github.com/z-larsen/ALZ-AutoPilot)
   checkout, including `Start-ALZDelivery.ps1`.
-- A complete [FinOps toolkit](https://github.com/microsoft/finops-toolkit)
-  **source checkout containing the Multitool TUI**:
-  `src\powershell\Public\Start-FinOpsMultitool.ps1` and its
-  `src\powershell\Private\FinOpsMultitool` implementation.
-  A module-only installation or a checkout without this command is not enough.
-  Select a release/branch that contains these files; the launcher does not fetch
-  development branches or substitute the old WPF scanner.
+- The [standalone FinOps Multitool TUI preview](https://github.com/z-larsen/FinOps-Multitool-TUI)
+  ([download ZIP](https://github.com/z-larsen/FinOps-Multitool-TUI/archive/refs/heads/main.zip)).
+  This is an unofficial preview snapshot for use pending toolkit availability.
+  Extract it and set `FinOpsToolkitRoot` to the folder containing
+  `Public\Start-FinOpsMultitool.ps1` and `Private\FinOpsMultitool`.
+  A complete [FinOps toolkit](https://github.com/microsoft/finops-toolkit) source
+  checkout also works if it contains those files under `src\powershell`.
+  The launcher recognizes both layouts, preferring `src\powershell` when present;
+  it does not fetch tools or substitute the old WPF scanner.
 - An existing [Azure ResourceTagger](https://github.com/z-larsen/AzureResourceTagger)
   checkout, including `Start-ResourceTagger.ps1`.
 - Each tool's own dependencies, Azure permissions and sign-in requirements.
@@ -44,7 +46,7 @@ installations. [launcher.example.psd1](launcher.example.psd1) assumes this layou
 C:\Tools\
     AzureToolLauncher\
     ALZ-AutoPilot\
-    finops-toolkit\
+    FinOps-Multitool-TUI\
     AzureResourceTagger\
 ```
 
@@ -53,6 +55,11 @@ the terminal's working directory. Spaces and brackets are supported. Inside a
 single-quoted PSD1 string, escape an apostrophe by doubling it (`O''Brien`).
 Environment-variable expressions and `~` are not expanded; use a real path.
 Only configure trusted, locally installed scripts.
+
+GitHub's source ZIP normally extracts to `FinOps-Multitool-TUI-main`; either
+rename that folder to match the example or use its actual name in your settings.
+The setting remains named `FinOpsToolkitRoot` for compatibility with existing
+configurations, even when it points at the standalone preview.
 
 The personal configuration is ignored by Git. Do not force-add it or put
 credentials, reports or customer data in this repository.
@@ -109,6 +116,13 @@ the setting at an existing `Start-DemoEnvironment.ps1` installation with
 `Start-LocalHubTUI.ps1` and `Setup-LocalFinOpsHub.ps1` beside it. These scripts
 are **not bundled here**. `FinOpsToolkitRoot` is passed explicitly as
 `-RepoRoot`, so FTKLocal does not use its author-specific default.
+
+The existing FTKLocal scripts require the **toolkit source layout**
+(`src\powershell\Public\Start-FinOpsMultitool.ps1`), not the standalone
+preview layout. Continue using a full toolkit source checkout for this option.
+If you only downloaded the standalone TUI, leave `FTKLocalScript` empty;
+the live TUI option works without FTKLocal. The launcher reports a layout error
+before starting Docker when this combination is incompatible.
 
 Follow that installation's prerequisite instructions (Docker Desktop with Linux
 containers, sufficient memory, and its data-ingestion dependencies). Selecting

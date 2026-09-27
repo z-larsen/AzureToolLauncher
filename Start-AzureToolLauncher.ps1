@@ -68,11 +68,19 @@ function Get-LauncherTarget {
     $required = @()
     if ($Tool -in @('FinOps', 'FTKLocal')) {
         $repo = $Configuration.FinOpsToolkitRoot
-        if ([string]::IsNullOrWhiteSpace($repo)) { throw 'Set FinOpsToolkitRoot to a FinOps toolkit source checkout.' }
-        $starter = Join-Path $repo 'src\powershell\Public\Start-FinOpsMultitool.ps1'
+        if ([string]::IsNullOrWhiteSpace($repo)) { throw 'Set FinOpsToolkitRoot to a standalone TUI download or FinOps toolkit source checkout.' }
+        $moduleRoot = Join-Path $repo 'src\powershell'
+        $sourceStarter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
+        if (-not (Test-Path -LiteralPath $sourceStarter -PathType Leaf)) {
+            if ($Tool -eq 'FTKLocal') {
+                throw 'FTKLocal requires FinOpsToolkitRoot to use the toolkit source layout (src\powershell). The standalone TUI download supports the live option only; leave FTKLocalScript empty if not used.'
+            }
+            $moduleRoot = $repo
+        }
+        $starter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
         $required += $starter
-        $required += Join-Path $repo 'src\powershell\Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1'
-        $required += Join-Path $repo 'src\powershell\Private\FinOpsMultitool\FinOpsMultitool.psm1'
+        $required += Join-Path $moduleRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1'
+        $required += Join-Path $moduleRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1'
         $target.ToolkitRoot = $repo
         if ($Tool -eq 'FinOps') { $target.Script = $starter }
     }

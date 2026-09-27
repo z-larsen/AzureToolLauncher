@@ -88,6 +88,30 @@ Describe 'Tool resolution and execution' {
         (Get-LauncherTarget -Tool ResourceTagger -Configuration $config).Script | Should -Be $config.ResourceTaggerScript
     }
 
+    It 'recognizes a complete standalone public preview download' {
+        $standalone = $config.Clone()
+        $standalone.FinOpsToolkitRoot = Join-Path $TestDrive 'standalone preview'
+        $public = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Public\Start-FinOpsMultitool.ps1')
+        $null = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1')
+        $null = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1')
+        (Get-LauncherTarget -Tool FinOps -Configuration $standalone).Script | Should -Be $public
+        { Get-LauncherTarget -Tool FTKLocal -Configuration $standalone } |
+            Should -Throw '*FTKLocal requires*toolkit source layout*'
+    }
+
+    It 'rejects a standalone download missing its private implementation' {
+        $standalone = $config.Clone()
+        $standalone.FinOpsToolkitRoot = Join-Path $TestDrive 'incomplete standalone'
+        $null = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Public\Start-FinOpsMultitool.ps1')
+        { Get-LauncherTarget -Tool FinOps -Configuration $standalone } |
+            Should -Throw '*Invoke-FinOpsMultitool.ps1*'
+    }
+
+    It 'prefers source layout over standalone layout when both are present' {
+        $null = New-TestToolFile (Join-Path $config.FinOpsToolkitRoot 'Public\Start-FinOpsMultitool.ps1')
+        (Get-LauncherTarget -Tool FinOps -Configuration $config).Script | Should -Be $starter
+    }
+
     It 'treats FTKLocal as optional but fails clearly when selected unconfigured' {
         $withoutDemo = $config.Clone()
         $withoutDemo.FTKLocalScript = ''
@@ -285,6 +309,26 @@ function Start-FinOpsMultitool {
         $LASTEXITCODE | Should -Be 0
         ($output -join "`n") | Should -Match 'Ready'
         ($output -join "`n") | Should -Not -Match 'WorkingDirectory'
+    }
+
+    It 'executes the standalone preview TUI across a real pwsh boundary' {
+        $standaloneConfig = New-TestToolFile (Join-Path $integrationRoot 'standalone.local.psd1') @'
+@{ FinOpsToolkitRoot = 'standalone preview'; FTKLocalScript = '' }
+'@
+        $moduleRoot = Join-Path $integrationRoot 'standalone preview'
+        $null = New-TestToolFile (Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1') @'
+function Start-FinOpsMultitool {
+    @{ Function = 'Standalone TUI'; WorkingDirectory = (Get-Location).Path } | ConvertTo-Json -Compress
+}
+'@
+        foreach ($path in @('Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\FinOpsMultitool.psm1')) {
+            $null = New-TestToolFile (Join-Path $moduleRoot $path)
+        }
+        $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $standaloneConfig -Tool FinOps
+        $LASTEXITCODE | Should -Be 0
+        $result = $output | ConvertFrom-Json
+        $result.Function | Should -Be 'Standalone TUI'
+        $result.WorkingDirectory | Should -Be (Join-Path $moduleRoot 'Public')
     }
 
     It 'exits nonzero when a configuration is missing' {
