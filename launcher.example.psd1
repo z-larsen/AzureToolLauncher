@@ -1,7 +1,7 @@
 @{
     # Absolute paths are also supported. Relative paths start at this file's folder.
     ALZScript = '..\ALZ-AutoPilot\Start-ALZDelivery.ps1'
-    # Standalone preview download root; a full finops-toolkit checkout also works.
+    # Standalone preview download root; the src\powershell source layout also works.
     FinOpsToolkitRoot = '..\FinOps-Multitool-TUI'
     ResourceTaggerScript = '..\AzureResourceTagger\Start-ResourceTagger.ps1'
 

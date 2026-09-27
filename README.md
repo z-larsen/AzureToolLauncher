@@ -17,11 +17,10 @@ is required.
   checkout, including `Start-ALZDelivery.ps1`.
 - The [standalone FinOps Multitool TUI preview](https://github.com/z-larsen/FinOps-Multitool-TUI)
   ([download ZIP](https://github.com/z-larsen/FinOps-Multitool-TUI/archive/refs/heads/main.zip)).
-  This is an unofficial preview snapshot for use pending toolkit availability.
+  This is an unofficial standalone preview snapshot.
   Extract it and set `FinOpsToolkitRoot` to the folder containing
   `Public\Start-FinOpsMultitool.ps1` and `Private\FinOpsMultitool`.
-  A complete [FinOps toolkit](https://github.com/microsoft/finops-toolkit) source
-  checkout also works if it contains those files under `src\powershell`.
+  A source installation also works if it contains those files under `src\powershell`.
   The launcher recognizes both layouts, preferring `src\powershell` when present;
   it does not fetch tools or substitute the old WPF scanner.
 - An existing [Azure ResourceTagger](https://github.com/z-larsen/AzureResourceTagger)
@@ -117,9 +116,9 @@ the setting at an existing `Start-DemoEnvironment.ps1` installation with
 are **not bundled here**. `FinOpsToolkitRoot` is passed explicitly as
 `-RepoRoot`, so FTKLocal does not use its author-specific default.
 
-The existing FTKLocal scripts require the **toolkit source layout**
+The existing FTKLocal scripts require the **`src\powershell` source layout**
 (`src\powershell\Public\Start-FinOpsMultitool.ps1`), not the standalone
-preview layout. Continue using a full toolkit source checkout for this option.
+preview layout. Continue using a compatible source installation for this option.
 If you only downloaded the standalone TUI, leave `FTKLocalScript` empty;
 the live TUI option works without FTKLocal. The launcher reports a layout error
 before starting Docker when this combination is incompatible.
