@@ -9,6 +9,8 @@ It opens each one in a separate PowerShell window, leaving the menu available.
 Downloaders configure their own paths; no particular username or folder layout
 is required.
 
+![Azure Tool Launcher menu with ALZ AutoPilot, FinOps Multitool TUI with optional FTKLocal demo, and Azure ResourceTagger.](docs/images/azure-tool-launcher.png)
+
 ## Prerequisites
 
 - Windows and **PowerShell 7.4+** (`pwsh`). ResourceTagger is a Windows WPF app;

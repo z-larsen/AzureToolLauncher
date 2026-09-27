@@ -4,5 +4,8 @@
 !New-LauncherShortcut.ps1
 !launcher.example.psd1
 !README.md
+!/docs/
+!/docs/images/
+!/docs/images/azure-tool-launcher.png
 !tests/
 !tests/Launcher.Tests.ps1
