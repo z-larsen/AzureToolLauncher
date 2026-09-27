@@ -1,0 +1,8 @@
+*
+!.gitignore
+!Start-AzureToolLauncher.ps1
+!New-LauncherShortcut.ps1
+!launcher.example.psd1
+!README.md
+!tests/
+!tests/Launcher.Tests.ps1
