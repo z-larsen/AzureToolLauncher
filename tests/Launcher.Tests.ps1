@@ -289,7 +289,8 @@ function Start-FinOpsMultitool {
     ) {
         $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $integrationConfig -Tool $Name
         $LASTEXITCODE | Should -Be 0
-        $result = $output | ConvertFrom-Json
+        ($output -join "`n") | Should -Match ([regex]::Escape("Starting $Name from $(Join-Path $integrationRoot $RelativePath)"))
+        $result = $output | Where-Object { $_ -like '{*' } | ConvertFrom-Json
         $result.Apartment | Should -Be 'STA'
         $result.WorkingDirectory | Should -Be (Split-Path (Join-Path $integrationRoot $RelativePath))
         if ($Name -eq 'FinOps') {
@@ -326,7 +327,7 @@ function Start-FinOpsMultitool {
         }
         $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $standaloneConfig -Tool FinOps
         $LASTEXITCODE | Should -Be 0
-        $result = $output | ConvertFrom-Json
+        $result = $output | Where-Object { $_ -like '{*' } | ConvertFrom-Json
         $result.Function | Should -Be 'Standalone TUI'
         $result.WorkingDirectory | Should -Be (Join-Path $moduleRoot 'Public')
     }
@@ -335,6 +336,30 @@ function Start-FinOpsMultitool {
         $output = & $pwsh -NoProfile -File $launcher -ConfigPath (Join-Path $TestDrive 'not-there.psd1') -Check 2>&1
         $LASTEXITCODE | Should -Not -Be 0
         ($output -join "`n") | Should -Match 'Configuration not found'
+    }
+
+    It 'opens a fresh download without personal settings and reports a missing tool when selected' {
+        $freshRoot = Join-Path $TestDrive 'fresh download\AzureToolLauncher'
+        $null = New-Item -ItemType Directory -Path $freshRoot -Force
+        Copy-Item -LiteralPath $launcher, (Join-Path $PSScriptRoot '..\launcher.example.psd1') -Destination $freshRoot
+        $output = "1`n`nq" | & $pwsh -NoProfile -File (Join-Path $freshRoot 'Start-AzureToolLauncher.ps1') 2>&1
+        $LASTEXITCODE | Should -Be 0
+        $text = $output -join "`n"
+        $text | Should -Match 'Using launcher\.example\.psd1'
+        $text | Should -Match 'Launch failed: Missing file for ALZ'
+        Test-Path -LiteralPath (Join-Path $freshRoot 'launcher.local.psd1') | Should -BeFalse
+    }
+
+    It 'prefers personal settings over the example when -ConfigPath is omitted' {
+        $personalRoot = Join-Path $TestDrive 'personal settings\AzureToolLauncher'
+        $null = New-Item -ItemType Directory -Path $personalRoot -Force
+        Copy-Item -LiteralPath $launcher, (Join-Path $PSScriptRoot '..\launcher.example.psd1') -Destination $personalRoot
+        $alz = Join-Path $integrationRoot 'ALZ\Start-ALZDelivery.ps1'
+        $null = New-TestToolFile (Join-Path $personalRoot 'launcher.local.psd1') "@{ ALZScript = '$($alz -replace "'", "''")' }"
+        $output = & $pwsh -NoLogo -NoProfile -STA -File (Join-Path $personalRoot 'Start-AzureToolLauncher.ps1') -Tool ALZ
+        $LASTEXITCODE | Should -Be 0
+        ($output -join "`n") | Should -Not -Match 'Using launcher\.example\.psd1'
+        ($output | Where-Object { $_ -like '{*' } | ConvertFrom-Json).File | Should -Be $alz
     }
 
     It 'handles redirected menu input, lowercase choices, invalid selections and Back' {

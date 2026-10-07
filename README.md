@@ -65,6 +65,12 @@ configurations, even when it points at the standalone preview.
 The personal configuration is ignored by Git. Do not force-add it or put
 credentials, reports or customer data in this repository.
 
+If `launcher.local.psd1` doesn't exist, the launcher uses `launcher.example.psd1`,
+so it opens right after download. From the menu, a tool starts only when you
+select it and its files exist at the configured path; otherwise the menu reports
+what's missing and stays open. Before a tool starts, the launcher shows the
+script path it runs.
+
 ```powershell
 .\Start-AzureToolLauncher.ps1 -Check
 .\Start-AzureToolLauncher.ps1

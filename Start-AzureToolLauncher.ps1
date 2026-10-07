@@ -7,6 +7,7 @@
     window. FTKLocal is optional; tools retain their own authentication and checks.
 .PARAMETER ConfigPath
     Local PSD1 configuration. Relative tool paths resolve against this file.
+    When omitted and launcher.local.psd1 doesn't exist, launcher.example.psd1 is used.
 .PARAMETER Tool
     Open the menu (default), or execute one tool in the current process.
 .PARAMETER Check
@@ -104,6 +105,7 @@ function Invoke-LauncherTool {
         [Parameter(Mandatory)][hashtable]$Target
     )
 
+    Write-Host "  Starting $Tool from $($Target.Script)" -ForegroundColor DarkGray
     Push-Location -LiteralPath (Split-Path $Target.Script) -ErrorAction Stop
     try {
         switch ($Tool) {
@@ -147,7 +149,7 @@ function Start-LauncherWindow {
     if ($PSCmdlet.ShouldProcess($target.Script, 'Launch in a separate PowerShell window')) {
         $process = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList $arguments `
             -WorkingDirectory (Split-Path $target.Script) -PassThru -ErrorAction Stop
-        Write-Host "  Opened $Tool in a separate window (PID $($process.Id)). Check that window for startup errors." -ForegroundColor Green
+        Write-Host "  Opened $Tool from $($target.Script) in a separate window (PID $($process.Id)). Check that window for startup errors." -ForegroundColor Green
     }
 }
 
@@ -212,6 +214,11 @@ if ($MyInvocation.InvocationName -eq '.') { return }
 $ErrorActionPreference = 'Stop'
 if (-not $IsWindows) { throw 'This launcher requires Windows (Azure ResourceTagger uses WPF).' }
 $ConfigPath = [System.IO.Path]::GetFullPath($ConfigPath, $PWD.ProviderPath)
+if (-not $PSBoundParameters.ContainsKey('ConfigPath') -and -not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) {
+    # A fresh download has no personal settings yet, so start with the shipped example layout.
+    $ConfigPath = Join-Path $PSScriptRoot 'launcher.example.psd1'
+    Write-Host '  No launcher.local.psd1 found. Using launcher.example.psd1; copy it to launcher.local.psd1 to set your own paths.' -ForegroundColor Yellow
+}
 $configuration = Read-LauncherConfiguration -Path $ConfigPath
 if ($Check) {
     $failed = $false
