@@ -15,6 +15,10 @@ BeforeAll {
         FinOpsToolkitRoot = Join-Path $root 'finops-toolkit'
         ResourceTaggerScript = New-TestToolFile (Join-Path $root 'Tagger\Start-ResourceTagger.ps1')
         FTKLocalScript = New-TestToolFile (Join-Path $root 'FTKLocal\Start-DemoEnvironment.ps1')
+        FinOpsDemoScript = New-TestToolFile (Join-Path $root 'FinOps Demo\Start-Demo.ps1') @'
+$env:LAUNCHER_TEST_DEMO = 'invoked'
+$env:LAUNCHER_TEST_HUB = if ($env:FINOPS_HUB_KUSTO_URI) { 'inherited' } else { 'cleared' }
+'@
     }
     $starter = New-TestToolFile (Join-Path $config.FinOpsToolkitRoot 'src\powershell\Public\Start-FinOpsMultitool.ps1') @'
 function Start-FinOpsMultitool {
@@ -26,6 +30,9 @@ function Start-FinOpsMultitool {
     $null = New-TestToolFile (Join-Path $config.FinOpsToolkitRoot 'src\powershell\Private\FinOpsMultitool\FinOpsMultitool.psm1')
     $null = New-TestToolFile (Join-Path $root 'FTKLocal\Start-LocalHubTUI.ps1')
     $null = New-TestToolFile (Join-Path $root 'FTKLocal\Setup-LocalFinOpsHub.ps1')
+    foreach ($path in @('_DemoAzureMocks.ps1', 'Public\Start-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\FinOpsMultitool.psm1')) {
+        $null = New-TestToolFile (Join-Path $root "FinOps Demo\$path")
+    }
 }
 
 Describe 'Portable configuration' {
@@ -119,6 +126,28 @@ Describe 'Tool resolution and execution' {
         { Get-LauncherTarget -Tool FinOps -Configuration $withoutDemo } | Should -Not -Throw
     }
 
+    It 'runs the synthetic demo from its own harness, not the configured TUI' {
+        $target = Get-LauncherTarget -Tool FinOpsDemo -Configuration $config
+        $target.Script | Should -Be $config.FinOpsDemoScript
+        $target.Script | Should -Not -BeLike "$($config.FinOpsToolkitRoot)*"
+    }
+
+    It 'treats the synthetic demo as optional but fails clearly when selected unconfigured' {
+        $withoutDemo = $config.Clone()
+        $withoutDemo.FinOpsDemoScript = ''
+        { Get-LauncherTarget -Tool FinOpsDemo -Configuration $withoutDemo } | Should -Throw '*FinOpsDemoScript*'
+        { Get-LauncherTarget -Tool FinOps -Configuration $withoutDemo } | Should -Not -Throw
+    }
+
+    It 'rejects a demo harness without its Azure stand-ins' {
+        $incomplete = $config.Clone()
+        $incomplete.FinOpsDemoScript = New-TestToolFile (Join-Path $TestDrive 'demo without mocks\Start-Demo.ps1')
+        foreach ($path in @('Public\Start-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\FinOpsMultitool.psm1')) {
+            $null = New-TestToolFile (Join-Path $TestDrive "demo without mocks\$path")
+        }
+        { Get-LauncherTarget -Tool FinOpsDemo -Configuration $incomplete } | Should -Throw '*_DemoAzureMocks.ps1*'
+    }
+
     It 'rejects an incomplete FinOps source checkout' {
         $incomplete = $config.Clone()
         $incomplete.FinOpsToolkitRoot = Join-Path $TestDrive 'incomplete'
@@ -150,6 +179,28 @@ Describe 'Tool resolution and execution' {
             $env:FINOPS_HUB_KUSTO_URI = $oldUri
             $env:FINOPS_HUB_KUSTO_DB = $oldDb
             $env:LAUNCHER_TEST_TUI = $null
+            $env:LAUNCHER_TEST_HUB = $null
+        }
+    }
+
+    It 'runs the synthetic demo with inherited local hub overrides cleared only during the run' {
+        $oldUri = $env:FINOPS_HUB_KUSTO_URI
+        $oldDb = $env:FINOPS_HUB_KUSTO_DB
+        $location = Get-Location
+        try {
+            $env:FINOPS_HUB_KUSTO_URI = 'http://localhost:8082'
+            $env:FINOPS_HUB_KUSTO_DB = 'Hub'
+            Invoke-LauncherTool -Tool FinOpsDemo -Target (Get-LauncherTarget -Tool FinOpsDemo -Configuration $config)
+            $env:LAUNCHER_TEST_DEMO | Should -Be 'invoked'
+            $env:LAUNCHER_TEST_HUB | Should -Be 'cleared'
+            $env:FINOPS_HUB_KUSTO_URI | Should -Be 'http://localhost:8082'
+            $env:FINOPS_HUB_KUSTO_DB | Should -Be 'Hub'
+            (Get-Location).Path | Should -Be $location.Path
+        }
+        finally {
+            $env:FINOPS_HUB_KUSTO_URI = $oldUri
+            $env:FINOPS_HUB_KUSTO_DB = $oldDb
+            $env:LAUNCHER_TEST_DEMO = $null
             $env:LAUNCHER_TEST_HUB = $null
         }
     }
@@ -218,13 +269,13 @@ Describe 'Process launch and menu' {
 
     It 'routes each menu choice and returns from the FinOps submenu' {
         $script:choices = [System.Collections.Generic.Queue[string]]::new()
-        foreach ($choice in @('invalid', '1', '2', 'bad', '1', '2', '2', '2', 'B', '3', 'Q')) {
+        foreach ($choice in @('invalid', '1', '2', 'bad', '1', '2', '2', '2', '3', '2', 'B', '3', 'Q')) {
             $script:choices.Enqueue($choice)
         }
         Mock Read-LauncherChoice { $script:choices.Dequeue() }
         Mock Start-LauncherWindow {}
         Show-LauncherMenu -Configuration $config -ConfigPath 'x' -LauncherPath $launcher
-        foreach ($expected in @('ALZ', 'FinOps', 'FTKLocal', 'ResourceTagger')) {
+        foreach ($expected in @('ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')) {
             Should -Invoke Start-LauncherWindow -Times 1 -Exactly -ParameterFilter { $Tool -eq $expected }
         }
         $script:choices.Count | Should -Be 0
@@ -249,6 +300,7 @@ Describe 'Real child-process smoke tests (stub tools only)' {
     FinOpsToolkitRoot = 'finops-toolkit'
     ResourceTaggerScript = 'Tagger\Start-ResourceTagger.ps1'
     FTKLocalScript = 'FTKLocal\Start-DemoEnvironment.ps1'
+    FinOpsDemoScript = 'FinOps Demo\Start-Demo.ps1'
 }
 '@
         $stub = @'
@@ -260,7 +312,7 @@ param([string]$RepoRoot)
     Apartment = [System.Threading.Thread]::CurrentThread.GetApartmentState().ToString()
 } | ConvertTo-Json -Compress
 '@
-        foreach ($path in @('ALZ\Start-ALZDelivery.ps1', 'Tagger\Start-ResourceTagger.ps1', 'FTKLocal\Start-DemoEnvironment.ps1')) {
+        foreach ($path in @('ALZ\Start-ALZDelivery.ps1', 'Tagger\Start-ResourceTagger.ps1', 'FTKLocal\Start-DemoEnvironment.ps1', 'FinOps Demo\Start-Demo.ps1')) {
             $null = New-TestToolFile (Join-Path $integrationRoot $path) $stub
         }
         $null = New-TestToolFile (Join-Path $integrationRoot 'finops-toolkit\src\powershell\Public\Start-FinOpsMultitool.ps1') @'
@@ -276,7 +328,9 @@ function Start-FinOpsMultitool {
         foreach ($path in @(
             'finops-toolkit\src\powershell\Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1',
             'finops-toolkit\src\powershell\Private\FinOpsMultitool\FinOpsMultitool.psm1',
-            'FTKLocal\Start-LocalHubTUI.ps1', 'FTKLocal\Setup-LocalFinOpsHub.ps1'
+            'FTKLocal\Start-LocalHubTUI.ps1', 'FTKLocal\Setup-LocalFinOpsHub.ps1',
+            'FinOps Demo\_DemoAzureMocks.ps1', 'FinOps Demo\Public\Start-FinOpsMultitool.ps1',
+            'FinOps Demo\Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1', 'FinOps Demo\Private\FinOpsMultitool\FinOpsMultitool.psm1'
         )) { $null = New-TestToolFile (Join-Path $integrationRoot $path) }
         $pwsh = Join-Path $PSHOME 'pwsh.exe'
     }
@@ -285,6 +339,7 @@ function Start-FinOpsMultitool {
         @{ Name = 'ALZ'; RelativePath = 'ALZ\Start-ALZDelivery.ps1' }
         @{ Name = 'ResourceTagger'; RelativePath = 'Tagger\Start-ResourceTagger.ps1' }
         @{ Name = 'FTKLocal'; RelativePath = 'FTKLocal\Start-DemoEnvironment.ps1' }
+        @{ Name = 'FinOpsDemo'; RelativePath = 'FinOps Demo\Start-Demo.ps1' }
         @{ Name = 'FinOps'; RelativePath = 'finops-toolkit\src\powershell\Public\Start-FinOpsMultitool.ps1' }
     ) {
         $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $integrationConfig -Tool $Name
@@ -310,6 +365,13 @@ function Start-FinOpsMultitool {
         $LASTEXITCODE | Should -Be 0
         ($output -join "`n") | Should -Match 'Ready'
         ($output -join "`n") | Should -Not -Match 'WorkingDirectory'
+    }
+
+    It 'reports an unconfigured synthetic demo as optional during -Check' {
+        $withoutDemo = New-TestToolFile (Join-Path $integrationRoot 'without-demo.local.psd1') ((Get-Content -LiteralPath $integrationConfig -Raw) -replace "(?m)^\s*FinOpsDemoScript = .*$", "    FinOpsDemoScript = ''")
+        $output = & $pwsh -NoProfile -File $launcher -ConfigPath $withoutDemo -Check
+        $LASTEXITCODE | Should -Be 0
+        ($output -join "`n") | Should -Match 'FinOpsDemo\s+Optional / not configured'
     }
 
     It 'executes the standalone preview TUI across a real pwsh boundary' {

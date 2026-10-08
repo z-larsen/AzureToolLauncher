@@ -7,4 +7,6 @@
 
     # Optional: full path to an existing FTKLocal Start-DemoEnvironment.ps1.
     FTKLocalScript = ''
+    # Optional: full path to an existing FinOps Multitool demo harness Start-Demo.ps1.
+    FinOpsDemoScript = ''
 }

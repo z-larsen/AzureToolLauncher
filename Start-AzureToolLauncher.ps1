@@ -4,7 +4,8 @@
     Console launcher for ALZ AutoPilot, FinOps Multitool TUI and Azure ResourceTagger.
 .DESCRIPTION
     Uses existing local tool installations. Each tool gets its own PowerShell
-    window. FTKLocal is optional; tools retain their own authentication and checks.
+    window. FTKLocal and the synthetic demo are optional; tools retain their own
+    authentication and checks.
 .PARAMETER ConfigPath
     Local PSD1 configuration. Relative tool paths resolve against this file.
     When omitted and launcher.local.psd1 doesn't exist, launcher.example.psd1 is used.
@@ -19,7 +20,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '', Justification = 'This is an interactive colored console menu; status is intentionally host output.')]
 param(
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'launcher.local.psd1'),
-    [ValidateSet('Menu', 'ALZ', 'FinOps', 'FTKLocal', 'ResourceTagger')]
+    [ValidateSet('Menu', 'ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')]
     [string]$Tool = 'Menu',
     [switch]$Check
 )
@@ -32,7 +33,7 @@ function Read-LauncherConfiguration {
     }
     $settings = Import-PowerShellDataFile -LiteralPath $Path -ErrorAction Stop
     $directory = Split-Path ([System.IO.Path]::GetFullPath($Path, $PWD.ProviderPath))
-    $keys = @('ALZScript', 'FinOpsToolkitRoot', 'ResourceTaggerScript', 'FTKLocalScript')
+    $keys = @('ALZScript', 'FinOpsToolkitRoot', 'ResourceTaggerScript', 'FTKLocalScript', 'FinOpsDemoScript')
     foreach ($key in $settings.Keys) {
         if ($key -notin $keys) { throw "Unknown configuration key '$key' in $Path." }
         if ($settings[$key] -isnot [string]) { throw "Configuration value '$key' must be a string." }
@@ -52,7 +53,7 @@ function Read-LauncherConfiguration {
 
 function Get-LauncherTarget {
     param(
-        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'ResourceTagger')][string]$Tool,
+        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')][string]$Tool,
         [Parameter(Mandatory)][hashtable]$Configuration
     )
 
@@ -60,6 +61,7 @@ function Get-LauncherTarget {
         ALZ { 'ALZScript' }
         FinOps { 'FinOpsToolkitRoot' }
         FTKLocal { 'FTKLocalScript' }
+        FinOpsDemo { 'FinOpsDemoScript' }
         ResourceTagger { 'ResourceTaggerScript' }
     }
     if ([string]::IsNullOrWhiteSpace($Configuration[$key])) {
@@ -90,6 +92,14 @@ function Get-LauncherTarget {
         $required += Join-Path $demoRoot 'Start-LocalHubTUI.ps1'
         $required += Join-Path $demoRoot 'Setup-LocalFinOpsHub.ps1'
     }
+    if ($Tool -eq 'FinOpsDemo') {
+        # The harness runs its own TUI copy; the mocks are what keep it off Azure.
+        $demoRoot = Split-Path $target.Script
+        $required += Join-Path $demoRoot '_DemoAzureMocks.ps1'
+        $required += Join-Path $demoRoot 'Public\Start-FinOpsMultitool.ps1'
+        $required += Join-Path $demoRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1'
+        $required += Join-Path $demoRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1'
+    }
     $required += $target.Script
     foreach ($file in $required) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
@@ -101,7 +111,7 @@ function Get-LauncherTarget {
 
 function Invoke-LauncherTool {
     param(
-        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'ResourceTagger')][string]$Tool,
+        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')][string]$Tool,
         [Parameter(Mandatory)][hashtable]$Target
     )
 
@@ -109,15 +119,18 @@ function Invoke-LauncherTool {
     Push-Location -LiteralPath (Split-Path $Target.Script) -ErrorAction Stop
     try {
         switch ($Tool) {
-            FinOps {
+            { $_ -in 'FinOps', 'FinOpsDemo' } {
                 $oldUri = $env:FINOPS_HUB_KUSTO_URI
                 $oldDatabase = $env:FINOPS_HUB_KUSTO_DB
                 try {
-                    # A live session must not inherit a previous local-demo endpoint.
+                    # Live and synthetic sessions must not inherit a previous local-demo endpoint.
                     $env:FINOPS_HUB_KUSTO_URI = $null
                     $env:FINOPS_HUB_KUSTO_DB = $null
-                    . $Target.Script
-                    Start-FinOpsMultitool
+                    if ($Tool -eq 'FinOps') {
+                        . $Target.Script
+                        Start-FinOpsMultitool
+                    }
+                    else { & $Target.Script }
                 }
                 finally {
                     $env:FINOPS_HUB_KUSTO_URI = $oldUri
@@ -134,7 +147,7 @@ function Invoke-LauncherTool {
 function Start-LauncherWindow {
     [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'ResourceTagger')][string]$Tool,
+        [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')][string]$Tool,
         [Parameter(Mandatory)][hashtable]$Configuration,
         [Parameter(Mandatory)][string]$ConfigPath,
         [Parameter(Mandatory)][string]$LauncherPath
@@ -174,7 +187,7 @@ function Show-LauncherMenu {
         Write-Host '   AZURE TOOL LAUNCHER' -ForegroundColor Cyan
         Write-Host '  ================================================================' -ForegroundColor Cyan
         Write-Host '  [1] ALZ AutoPilot        - guided ALZ Accelerator delivery'
-        Write-Host '  [2] FinOps Multitool TUI - terminal UI (+ optional FTKLocal demo)'
+        Write-Host '  [2] FinOps Multitool TUI - terminal UI (+ optional demos)'
         Write-Host '  [3] Azure ResourceTagger - scan and bulk-apply resource tags'
         Write-Host '  [Q] Quit'
         $selection = switch (Read-LauncherChoice '  Select a tool') {
@@ -186,10 +199,12 @@ function Show-LauncherMenu {
                     Write-Host '  [2] Local demo (FTKLocal)'
                     Write-Host '      Hub data is synthetic; other scans can query your REAL Azure tenant.' -ForegroundColor Yellow
                     Write-Host '      First run may download images/data and create a local container.'
+                    Write-Host '  [3] Synthetic demo (Contoso) - invented data from the demo harness, no Azure sign-in'
                     Write-Host '  [B] Back'
                     $choice = Read-LauncherChoice '  Select an option'
                     if ($choice -eq '1') { 'FinOps'; break }
                     if ($choice -eq '2') { 'FTKLocal'; break }
+                    if ($choice -eq '3') { 'FinOpsDemo'; break }
                     if ($choice -eq 'B') { break }
                     Write-Host '  Not a valid choice.' -ForegroundColor Yellow
                 }
@@ -222,8 +237,9 @@ if (-not $PSBoundParameters.ContainsKey('ConfigPath') -and -not (Test-Path -Lite
 $configuration = Read-LauncherConfiguration -Path $ConfigPath
 if ($Check) {
     $failed = $false
-    foreach ($name in @('ALZ', 'FinOps', 'ResourceTagger', 'FTKLocal')) {
-        if ($name -eq 'FTKLocal' -and -not $configuration.FTKLocalScript) {
+    $optional = @{ FTKLocal = 'FTKLocalScript'; FinOpsDemo = 'FinOpsDemoScript' }
+    foreach ($name in @('ALZ', 'FinOps', 'ResourceTagger', 'FTKLocal', 'FinOpsDemo')) {
+        if ($optional.ContainsKey($name) -and -not $configuration[$optional[$name]]) {
             [pscustomobject]@{ Tool = $name; Status = 'Optional / not configured'; Detail = '' }
             continue
         }

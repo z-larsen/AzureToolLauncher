@@ -1,8 +1,8 @@
 # Azure Tool Launcher
 
 A Windows console menu for existing installations of **ALZ AutoPilot**,
-**FinOps Multitool TUI**, and **Azure ResourceTagger**, with an optional
-**FTKLocal** demo entry under FinOps.
+**FinOps Multitool TUI**, and **Azure ResourceTagger**, with optional
+**FTKLocal** and **synthetic demo** entries under FinOps.
 
 The launcher does not bundle, install, update, or authenticate any of the tools.
 It opens each one in a separate PowerShell window, leaving the menu available.
@@ -78,8 +78,8 @@ script path it runs.
 
 `-Check` verifies entry-point files and the TUI's core files without launching
 anything. It is **not** a check of Azure access, all dependencies, Docker health,
-or tool compatibility. Missing configured files produce an error; an unconfigured
-FTKLocal entry is optional.
+or tool compatibility. Missing configured files produce an error; unconfigured
+FTKLocal and synthetic demo entries are optional.
 
 ## Menu
 
@@ -88,6 +88,7 @@ FTKLocal entry is optional.
 [2] FinOps Multitool TUI
     [1] Live / connected environment
     [2] Local demo (FTKLocal)
+    [3] Synthetic demo (Contoso)
     [B] Back
 [3] Azure ResourceTagger
 [Q] Quit
@@ -141,6 +142,21 @@ FTKLocal setup serves synthetic hub cost data, but other scans and tenant
 selection can still access/show real Azure information. Verify the hub source
 in the TUI and limit scans according to your FTKLocal version before sharing
 your screen. Check that its sample dataset paths are correct on your machine.
+
+## Optional synthetic demo
+
+Leave `FinOpsDemoScript = ''` if you don't have the FinOps Multitool demo
+harness. To enable it, point the setting at that harness's `Start-Demo.ps1`,
+with `_DemoAzureMocks.ps1`, `Public\Start-FinOpsMultitool.ps1`, and
+`Private\FinOpsMultitool` beside it. The harness is **not bundled here**.
+
+The harness runs its own copy of the TUI with stand-in Az modules and invented
+"Contoso Demo" data, so it needs no Azure sign-in. It doesn't use
+`FinOpsToolkitRoot`, and the launcher clears inherited `FINOPS_HUB_KUSTO_URI`
+and `FINOPS_HUB_KUSTO_DB` overrides for the run, the same as the live option.
+The launcher only starts the harness; its menus, data, and reports come from
+the harness version you installed. Check its DEMO MODE banner before sharing
+your screen.
 
 ## Desktop shortcut
 
