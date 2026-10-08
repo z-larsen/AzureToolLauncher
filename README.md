@@ -151,7 +151,8 @@ with `_DemoAzureMocks.ps1`, `Public\Start-FinOpsMultitool.ps1`, and
 `Private\FinOpsMultitool` beside it. The harness is **not bundled here**.
 
 The harness runs its own copy of the TUI with stand-in Az modules and invented
-"Contoso Demo" data, so it needs no Azure sign-in. It doesn't use
+"Contoso Demo" data. The launcher doesn't isolate it from Azure; that depends on
+the harness itself. It doesn't use
 `FinOpsToolkitRoot`, and the launcher clears inherited `FINOPS_HUB_KUSTO_URI`
 and `FINOPS_HUB_KUSTO_DB` overrides for the run, the same as the live option.
 The launcher only starts the harness; its menus, data, and reports come from

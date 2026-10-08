@@ -199,7 +199,7 @@ function Show-LauncherMenu {
                     Write-Host '  [2] Local demo (FTKLocal)'
                     Write-Host '      Hub data is synthetic; other scans can query your REAL Azure tenant.' -ForegroundColor Yellow
                     Write-Host '      First run may download images/data and create a local container.'
-                    Write-Host '  [3] Synthetic demo (Contoso) - invented data from the demo harness, no Azure sign-in'
+                    Write-Host '  [3] Synthetic demo (Contoso) - invented data from the demo harness'
                     Write-Host '  [B] Back'
                     $choice = Read-LauncherChoice '  Select an option'
                     if ($choice -eq '1') { 'FinOps'; break }
