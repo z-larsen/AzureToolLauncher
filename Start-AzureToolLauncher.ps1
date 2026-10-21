@@ -1,7 +1,7 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-    Console launcher for ALZ AutoPilot, FinOps Multitool TUI and Azure ResourceTagger.
+    Console launcher for ALZ AutoPilot, FinOps Explorer TUI and Azure ResourceTagger.
 .DESCRIPTION
     Uses existing local tool installations. Each tool gets its own PowerShell
     window. FTKLocal and the synthetic demo are optional; tools retain their own
@@ -73,14 +73,19 @@ function Get-LauncherTarget {
         $repo = $Configuration.FinOpsToolkitRoot
         if ([string]::IsNullOrWhiteSpace($repo)) { throw 'Set FinOpsToolkitRoot to a standalone TUI download or FinOps toolkit source checkout.' }
         $moduleRoot = Join-Path $repo 'src\powershell'
-        $sourceStarter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
-        if (-not (Test-Path -LiteralPath $sourceStarter -PathType Leaf)) {
+        $sourceExplorerStarter = Join-Path $moduleRoot 'Public\Start-FinOpsExplorer.ps1'
+        $sourceLegacyStarter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
+        if (-not (Test-Path -LiteralPath $sourceExplorerStarter -PathType Leaf) -and
+            -not (Test-Path -LiteralPath $sourceLegacyStarter -PathType Leaf)) {
             if ($Tool -eq 'FTKLocal') {
                 throw 'FTKLocal requires FinOpsToolkitRoot to use the toolkit source layout (src\powershell). The standalone TUI download supports the live option only; leave FTKLocalScript empty if not used.'
             }
             $moduleRoot = $repo
         }
-        $starter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
+        $explorerStarter = Join-Path $moduleRoot 'Public\Start-FinOpsExplorer.ps1'
+        $legacyStarter = Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1'
+        $starter = if (Test-Path -LiteralPath $explorerStarter -PathType Leaf) { $explorerStarter } else { $legacyStarter }
+        $target.Function = if ($starter -eq $explorerStarter) { 'Start-FinOpsExplorer' } else { 'Start-FinOpsMultitool' }
         $required += $starter
         $required += Join-Path $moduleRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1'
         $required += Join-Path $moduleRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1'
@@ -128,7 +133,7 @@ function Invoke-LauncherTool {
                     $env:FINOPS_HUB_KUSTO_DB = $null
                     if ($Tool -eq 'FinOps') {
                         . $Target.Script
-                        Start-FinOpsMultitool
+                        & $Target.Function
                     }
                     else { & $Target.Script }
                 }
@@ -187,14 +192,14 @@ function Show-LauncherMenu {
         Write-Host '   AZURE TOOL LAUNCHER' -ForegroundColor Cyan
         Write-Host '  ================================================================' -ForegroundColor Cyan
         Write-Host '  [1] ALZ AutoPilot        - guided ALZ Accelerator delivery'
-        Write-Host '  [2] FinOps Multitool TUI - terminal UI (+ optional demos)'
+        Write-Host '  [2] FinOps Explorer TUI  - terminal UI (+ optional demos)'
         Write-Host '  [3] Azure ResourceTagger - scan and bulk-apply resource tags'
         Write-Host '  [Q] Quit'
         $selection = switch (Read-LauncherChoice '  Select a tool') {
             '1' { 'ALZ' }
             '2' {
                 while ($true) {
-                    Write-Host "`n  --- FinOps Multitool TUI ---" -ForegroundColor Cyan
+                    Write-Host "`n  --- FinOps Explorer TUI ---" -ForegroundColor Cyan
                     Write-Host '  [1] Live / connected environment - choose data source in the TUI'
                     Write-Host '  [2] Local demo (FTKLocal)'
                     Write-Host '      Hub data is synthetic; other scans can query your REAL Azure tenant.' -ForegroundColor Yellow

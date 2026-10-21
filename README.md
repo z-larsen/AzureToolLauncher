@@ -1,7 +1,7 @@
 # Azure Tool Launcher
 
 A Windows console menu for existing installations of **ALZ AutoPilot**,
-**FinOps Multitool TUI**, and **Azure ResourceTagger**, with optional
+**FinOps Explorer TUI**, and **Azure ResourceTagger**, with optional
 **FTKLocal** and **synthetic demo** entries under FinOps.
 
 The launcher does not bundle, install, update, or authenticate any of the tools.
@@ -9,7 +9,7 @@ It opens each one in a separate PowerShell window, leaving the menu available.
 Downloaders configure their own paths; no particular username or folder layout
 is required.
 
-![Azure Tool Launcher menu with ALZ AutoPilot, FinOps Multitool TUI with optional FTKLocal demo, and Azure ResourceTagger.](docs/images/azure-tool-launcher.png)
+![Azure Tool Launcher menu with ALZ AutoPilot, FinOps Explorer TUI with optional FTKLocal demo, and Azure ResourceTagger.](docs/images/azure-tool-launcher.png)
 
 ## Prerequisites
 
@@ -17,14 +17,16 @@ is required.
   the FinOps option uses the **terminal UI**, not the former WPF scanner.
 - An existing [ALZ AutoPilot](https://github.com/z-larsen/ALZ-AutoPilot)
   checkout, including `Start-ALZDelivery.ps1`.
-- The [standalone FinOps Multitool TUI preview](https://github.com/z-larsen/FinOps-Multitool-TUI)
+- The [standalone FinOps Explorer TUI preview](https://github.com/z-larsen/FinOps-Multitool-TUI)
   ([download ZIP](https://github.com/z-larsen/FinOps-Multitool-TUI/archive/refs/heads/main.zip)).
   This is an unofficial standalone preview snapshot.
   Extract it and set `FinOpsToolkitRoot` to the folder containing
-  `Public\Start-FinOpsMultitool.ps1` and `Private\FinOpsMultitool`.
+  `Public\Start-FinOpsExplorer.ps1` and `Private\FinOpsMultitool`.
   A source installation also works if it contains those files under `src\powershell`.
-  The launcher recognizes both layouts, preferring `src\powershell` when present;
-  it does not fetch tools or substitute the old WPF scanner.
+  The launcher prefers `Start-FinOpsExplorer.ps1` and falls back to the legacy
+  `Start-FinOpsMultitool.ps1` entry point for older local installations. It recognizes
+  both layouts, preferring `src\powershell` when present; it does not fetch tools or
+  substitute the separate WPF/Desktop application.
 - An existing [Azure ResourceTagger](https://github.com/z-larsen/AzureResourceTagger)
   checkout, including `Start-ResourceTagger.ps1`.
 - Each tool's own dependencies, Azure permissions and sign-in requirements.
@@ -85,7 +87,7 @@ FTKLocal and synthetic demo entries are optional.
 
 ```text
 [1] ALZ AutoPilot
-[2] FinOps Multitool TUI
+[2] FinOps Explorer TUI
     [1] Live / connected environment
     [2] Local demo (FTKLocal)
     [3] Synthetic demo (Contoso)
@@ -126,7 +128,7 @@ are **not bundled here**. `FinOpsToolkitRoot` is passed explicitly as
 `-RepoRoot`, so FTKLocal does not use its author-specific default.
 
 The existing FTKLocal scripts require the **`src\powershell` source layout**
-(`src\powershell\Public\Start-FinOpsMultitool.ps1`), not the standalone
+(`src\powershell\Public\Start-FinOpsExplorer.ps1`), not the standalone
 preview layout. Continue using a compatible source installation for this option.
 If you only downloaded the standalone TUI, leave `FTKLocalScript` empty;
 the live TUI option works without FTKLocal. The launcher reports a layout error
@@ -145,7 +147,7 @@ your screen. Check that its sample dataset paths are correct on your machine.
 
 ## Optional synthetic demo
 
-Leave `FinOpsDemoScript = ''` if you don't have the FinOps Multitool demo
+Leave `FinOpsDemoScript = ''` if you don't have the FinOps Explorer demo
 harness. To enable it, point the setting at that harness's `Start-Demo.ps1`,
 with `_DemoAzureMocks.ps1`, `Public\Start-FinOpsMultitool.ps1`, and
 `Private\FinOpsMultitool` beside it. The harness is **not bundled here**.

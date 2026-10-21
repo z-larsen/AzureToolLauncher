@@ -31,7 +31,7 @@ if ($PSCmdlet.ShouldProcess($ShortcutPath, 'Create launcher shortcut')) {
         $shortcut.Arguments = "-NoLogo -NoProfile -NoExit -File `"$launcher`" -ConfigPath `"$ConfigPath`""
         $shortcut.WorkingDirectory = $PSScriptRoot
         $shortcut.IconLocation = "$(Join-Path $PSHOME 'pwsh.exe'),0"
-        $shortcut.Description = 'ALZ AutoPilot, FinOps Multitool TUI (+FTKLocal), Azure ResourceTagger'
+        $shortcut.Description = 'ALZ AutoPilot, FinOps Explorer TUI (+FTKLocal), Azure ResourceTagger'
         $shortcut.Save()
         Write-Output "Created: $ShortcutPath"
     }

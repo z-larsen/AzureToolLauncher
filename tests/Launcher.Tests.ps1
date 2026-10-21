@@ -20,8 +20,8 @@ $env:LAUNCHER_TEST_DEMO = 'invoked'
 $env:LAUNCHER_TEST_HUB = if ($env:FINOPS_HUB_KUSTO_URI) { 'inherited' } else { 'cleared' }
 '@
     }
-    $starter = New-TestToolFile (Join-Path $config.FinOpsToolkitRoot 'src\powershell\Public\Start-FinOpsMultitool.ps1') @'
-function Start-FinOpsMultitool {
+    $starter = New-TestToolFile (Join-Path $config.FinOpsToolkitRoot 'src\powershell\Public\Start-FinOpsExplorer.ps1') @'
+function Start-FinOpsExplorer {
     $env:LAUNCHER_TEST_TUI = 'invoked'
     $env:LAUNCHER_TEST_HUB = if ($env:FINOPS_HUB_KUSTO_URI) { 'inherited' } else { 'cleared' }
 }
@@ -98,12 +98,25 @@ Describe 'Tool resolution and execution' {
     It 'recognizes a complete standalone public preview download' {
         $standalone = $config.Clone()
         $standalone.FinOpsToolkitRoot = Join-Path $TestDrive 'standalone preview'
-        $public = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Public\Start-FinOpsMultitool.ps1')
+        $public = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Public\Start-FinOpsExplorer.ps1')
         $null = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1')
         $null = New-TestToolFile (Join-Path $standalone.FinOpsToolkitRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1')
-        (Get-LauncherTarget -Tool FinOps -Configuration $standalone).Script | Should -Be $public
+        $target = Get-LauncherTarget -Tool FinOps -Configuration $standalone
+        $target.Script | Should -Be $public
+        $target.Function | Should -Be 'Start-FinOpsExplorer'
         { Get-LauncherTarget -Tool FTKLocal -Configuration $standalone } |
             Should -Throw '*FTKLocal requires*toolkit source layout*'
+    }
+
+    It 'falls back to the legacy public entry point when Explorer is absent' {
+        $legacyOnly = $config.Clone()
+        $legacyOnly.FinOpsToolkitRoot = Join-Path $TestDrive 'legacy-only TUI'
+        $legacy = New-TestToolFile (Join-Path $legacyOnly.FinOpsToolkitRoot 'Public\Start-FinOpsMultitool.ps1')
+        $null = New-TestToolFile (Join-Path $legacyOnly.FinOpsToolkitRoot 'Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1')
+        $null = New-TestToolFile (Join-Path $legacyOnly.FinOpsToolkitRoot 'Private\FinOpsMultitool\FinOpsMultitool.psm1')
+        $target = Get-LauncherTarget -Tool FinOps -Configuration $legacyOnly
+        $target.Script | Should -Be $legacy
+        $target.Function | Should -Be 'Start-FinOpsMultitool'
     }
 
     It 'rejects a standalone download missing its private implementation' {
@@ -315,10 +328,10 @@ param([string]$RepoRoot)
         foreach ($path in @('ALZ\Start-ALZDelivery.ps1', 'Tagger\Start-ResourceTagger.ps1', 'FTKLocal\Start-DemoEnvironment.ps1', 'FinOps Demo\Start-Demo.ps1')) {
             $null = New-TestToolFile (Join-Path $integrationRoot $path) $stub
         }
-        $null = New-TestToolFile (Join-Path $integrationRoot 'finops-toolkit\src\powershell\Public\Start-FinOpsMultitool.ps1') @'
-function Start-FinOpsMultitool {
+        $null = New-TestToolFile (Join-Path $integrationRoot 'finops-toolkit\src\powershell\Public\Start-FinOpsExplorer.ps1') @'
+function Start-FinOpsExplorer {
     @{
-        Function = 'Start-FinOpsMultitool'
+        Function = 'Start-FinOpsExplorer'
         HubOverride = $env:FINOPS_HUB_KUSTO_URI
         WorkingDirectory = (Get-Location).Path
         Apartment = [System.Threading.Thread]::CurrentThread.GetApartmentState().ToString()
@@ -340,7 +353,7 @@ function Start-FinOpsMultitool {
         @{ Name = 'ResourceTagger'; RelativePath = 'Tagger\Start-ResourceTagger.ps1' }
         @{ Name = 'FTKLocal'; RelativePath = 'FTKLocal\Start-DemoEnvironment.ps1' }
         @{ Name = 'FinOpsDemo'; RelativePath = 'FinOps Demo\Start-Demo.ps1' }
-        @{ Name = 'FinOps'; RelativePath = 'finops-toolkit\src\powershell\Public\Start-FinOpsMultitool.ps1' }
+        @{ Name = 'FinOps'; RelativePath = 'finops-toolkit\src\powershell\Public\Start-FinOpsExplorer.ps1' }
     ) {
         $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $integrationConfig -Tool $Name
         $LASTEXITCODE | Should -Be 0
@@ -349,7 +362,7 @@ function Start-FinOpsMultitool {
         $result.Apartment | Should -Be 'STA'
         $result.WorkingDirectory | Should -Be (Split-Path (Join-Path $integrationRoot $RelativePath))
         if ($Name -eq 'FinOps') {
-            $result.Function | Should -Be 'Start-FinOpsMultitool'
+            $result.Function | Should -Be 'Start-FinOpsExplorer'
             $result.HubOverride | Should -BeNullOrEmpty
         }
         else {
@@ -379,8 +392,8 @@ function Start-FinOpsMultitool {
 @{ FinOpsToolkitRoot = 'standalone preview'; FTKLocalScript = '' }
 '@
         $moduleRoot = Join-Path $integrationRoot 'standalone preview'
-        $null = New-TestToolFile (Join-Path $moduleRoot 'Public\Start-FinOpsMultitool.ps1') @'
-function Start-FinOpsMultitool {
+        $null = New-TestToolFile (Join-Path $moduleRoot 'Public\Start-FinOpsExplorer.ps1') @'
+function Start-FinOpsExplorer {
     @{ Function = 'Standalone TUI'; WorkingDirectory = (Get-Location).Path } | ConvertTo-Json -Compress
 }
 '@
@@ -392,6 +405,20 @@ function Start-FinOpsMultitool {
         $result = $output | Where-Object { $_ -like '{*' } | ConvertFrom-Json
         $result.Function | Should -Be 'Standalone TUI'
         $result.WorkingDirectory | Should -Be (Join-Path $moduleRoot 'Public')
+    }
+
+    It 'executes an older legacy-only TUI installation across a real pwsh boundary' {
+        $legacyConfig = New-TestToolFile (Join-Path $integrationRoot 'legacy.local.psd1') "@{ FinOpsToolkitRoot = 'legacy preview'; FTKLocalScript = '' }"
+        $legacyRoot = Join-Path $integrationRoot 'legacy preview'
+        $null = New-TestToolFile (Join-Path $legacyRoot 'Public\Start-FinOpsMultitool.ps1') "function Start-FinOpsMultitool { @{ Function = 'Legacy TUI'; WorkingDirectory = (Get-Location).Path } | ConvertTo-Json -Compress }"
+        foreach ($path in @('Private\FinOpsMultitool\Invoke-FinOpsMultitool.ps1', 'Private\FinOpsMultitool\FinOpsMultitool.psm1')) {
+            $null = New-TestToolFile (Join-Path $legacyRoot $path)
+        }
+        $output = & $pwsh -NoLogo -NoProfile -STA -File $launcher -ConfigPath $legacyConfig -Tool FinOps
+        $LASTEXITCODE | Should -Be 0
+        $result = $output | Where-Object { $_ -like '{*' } | ConvertFrom-Json
+        $result.Function | Should -Be 'Legacy TUI'
+        $result.WorkingDirectory | Should -Be (Join-Path $legacyRoot 'Public')
     }
 
     It 'exits nonzero when a configuration is missing' {
@@ -428,7 +455,7 @@ function Start-FinOpsMultitool {
         $output = "invalid`n2`nb`nq" | & $pwsh -NoProfile -File $launcher -ConfigPath $integrationConfig
         $LASTEXITCODE | Should -Be 0
         ($output -join "`n") | Should -Match 'Not a valid choice'
-        ($output -join "`n") | Should -Match 'FinOps Multitool TUI'
+        ($output -join "`n") | Should -Match 'FinOps Explorer TUI'
     }
 
     It 'fails instead of looping forever at redirected end-of-input' {
