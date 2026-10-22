@@ -5,7 +5,8 @@
 .DESCRIPTION
     Uses existing local tool installations. Each tool gets its own PowerShell
     window. FTKLocal and the synthetic demo are optional; tools retain their own
-    authentication and checks.
+    authentication and checks. When several Azure accounts are saved, the FinOps
+    live and FTKLocal windows ask which one to use before the TUI starts.
 .PARAMETER ConfigPath
     Local PSD1 configuration. Relative tool paths resolve against this file.
     When omitted and launcher.local.psd1 doesn't exist, launcher.example.psd1 is used.
@@ -114,12 +115,92 @@ function Get-LauncherTarget {
     return $target
 }
 
+function Test-LauncherInteractive {
+    return -not [Console]::IsInputRedirected -and -not [Console]::IsOutputRedirected
+}
+
+function Get-LauncherAzureContext {
+    # Az.Accounts is optional here; the TUI reports a missing module itself.
+    if (-not (Get-Command -Name Get-AzContext -ErrorAction SilentlyContinue)) { return $null }
+    [pscustomobject]@{
+        Default = Get-AzContext -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        All     = @(Get-AzContext -ListAvailable -WarningAction SilentlyContinue -ErrorAction SilentlyContinue)
+    }
+}
+
+function Get-LauncherSignInChoice {
+    param(
+        [AllowNull()][object[]]$Context,
+        [AllowNull()][object]$Default
+    )
+
+    $choices = foreach ($group in @($Context | Where-Object { $_ } | Group-Object { [string]$_.Account.Id })) {
+        $members = @($group.Group | Sort-Object Name)
+        # The saved default stands for its own account so keeping it changes nothing.
+        $pick = $members | Where-Object { $Default -and $_.Name -eq $Default.Name } | Select-Object -First 1
+        $isDefault = $null -ne $pick
+        if (-not $isDefault) {
+            # Start the TUI's tenant list in the account's home tenant when a context for it is saved.
+            $extended = $members[0].Account.ExtendedProperties
+            $homeTenantId = if ($extended -and @($extended.Keys) -contains 'HomeAccountId') { ([string]$extended['HomeAccountId'] -split '\.')[-1] }
+            $pick = $members | Where-Object { $_.Tenant.Id -eq $homeTenantId } | Select-Object -First 1
+            if (-not $pick) { $pick = $members[0] }
+        }
+        [pscustomobject]@{
+            Account   = [string]$group.Name
+            IsDefault = $isDefault
+            Context   = $pick
+        }
+    }
+    return @($choices | Sort-Object Account)
+}
+
+function Switch-LauncherAzureContext {
+    param([Parameter(Mandatory)][object]$Context)
+
+    # Process scope leaves the saved default sign-in alone for other windows and tools.
+    $null = Select-AzContext -InputObject $Context -Scope Process -ErrorAction Stop
+}
+
+function Select-LauncherAzureSignIn {
+    # Returns $false only when the user cancels. Skipping the prompt is not a cancel.
+    $azure = if (Test-LauncherInteractive) { Get-LauncherAzureContext }
+    $choices = if ($azure) { @(Get-LauncherSignInChoice -Context $azure.All -Default $azure.Default) } else { @() }
+    if ($choices.Count -lt 2) { return $true }
+
+    Write-Host "`n  --- Azure account for this window ---" -ForegroundColor Cyan
+    Write-Host '  More than one account is saved. Azure PowerShell would use the last one, so choose.'
+    Write-Host "  The TUI shows that account's tenants next." -ForegroundColor DarkGray
+    for ($i = 0; $i -lt $choices.Count; $i++) {
+        $choice = $choices[$i]
+        $last = if ($choice.IsDefault) { '  <- last signed in' } else { '' }
+        Write-Host ('  [{0}] {1}{2}' -f ($i + 1), $choice.Account, $last) -ForegroundColor $(if ($choice.IsDefault) { 'Yellow' } else { 'White' })
+    }
+    Write-Host '  [Q] Cancel'
+    # No Enter default: the point is that the account is chosen, not inherited.
+    while ($true) {
+        $answer = Read-LauncherChoice "  Select an account (1-$($choices.Count))"
+        if ($answer -eq 'Q') { return $false }
+        $number = 0
+        if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $choices.Count) { break }
+        Write-Host '  Not a valid choice.' -ForegroundColor Yellow
+    }
+    $chosen = $choices[$number - 1]
+    if (-not $chosen.IsDefault) { Switch-LauncherAzureContext -Context $chosen.Context }
+    Write-Host "  Using $($chosen.Account) in this window only." -ForegroundColor Green
+    return $true
+}
+
 function Invoke-LauncherTool {
     param(
         [Parameter(Mandatory)][ValidateSet('ALZ', 'FinOps', 'FTKLocal', 'FinOpsDemo', 'ResourceTagger')][string]$Tool,
         [Parameter(Mandatory)][hashtable]$Target
     )
 
+    if (($Tool -in @('FinOps', 'FTKLocal')) -and -not (Select-LauncherAzureSignIn)) {
+        Write-Host '  Cancelled. Nothing was started.' -ForegroundColor Yellow
+        return
+    }
     Write-Host "  Starting $Tool from $($Target.Script)" -ForegroundColor DarkGray
     Push-Location -LiteralPath (Split-Path $Target.Script) -ErrorAction Stop
     try {

@@ -96,8 +96,10 @@ FTKLocal and synthetic demo entries are optional.
 [Q] Quit
 ```
 
-The live option loads the public `Start-FinOpsMultitool` function and **calls
+The live option loads the public `Start-FinOpsExplorer` function and **calls
 it**, retaining the TUI's data-source, tenant, subscription and scan prompts.
+When more than one Azure account is saved, it first
+[asks which one to use](#choosing-the-azure-account).
 Inherited `FINOPS_HUB_KUSTO_URI` and `FINOPS_HUB_KUSTO_DB` overrides are cleared
 for that run to avoid accidentally using a previous demo endpoint. Choose your
 real hub within the TUI when needed.
@@ -118,6 +120,30 @@ For a different configuration, or to execute a tool in the current terminal:
 ALZ still asks for a delivery folder. Choose a non-cloud-synced output folder
 (for example, `C:\ALZ\MyTenant`) per its guidance. FinOps reports and all other
 tool outputs remain governed by the tools, not the launcher.
+
+### Choosing the Azure account
+
+Azure PowerShell starts every new window in the sign-in you used last, and the
+TUI builds its tenant list from that one account. If the last sign-in was an
+account that can see a single tenant, such as a customer-issued one, the tenant
+list has nothing to offer and a scan starts in that tenant without asking. When
+two or more accounts are saved, the **Live** and **FTKLocal** windows therefore
+ask which account to use before the TUI starts. The one used last is marked.
+Enter a number, or `Q` to cancel. Enter alone doesn't pick one, because the
+account is meant to be a choice, not a default. The TUI then shows that
+account's tenants as usual, and you pick the one to scan there.
+
+The choice applies to that window only (`Select-AzContext -Scope Process`).
+Other windows and tools keep the saved default, and nothing is signed in or
+out. To add an account to the list, sign in with it once using
+`Connect-AzAccount`; this needs Azure PowerShell context autosave, which is on
+by default.
+
+The question is skipped when fewer than two accounts are saved, when
+Az.Accounts isn't installed, or when the console is redirected. The synthetic
+demo never asks because it doesn't use Azure. If you run
+`.\Start-AzureToolLauncher.ps1 -Tool FinOps` in your own terminal, the choice
+lasts for that terminal session.
 
 ## Optional FTKLocal
 

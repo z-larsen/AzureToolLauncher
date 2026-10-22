@@ -84,9 +84,15 @@ Describe 'Portable configuration' {
 }
 
 Describe 'Tool resolution and execution' {
+    BeforeEach {
+        # These tests run tool stand-ins in-process, so the real sign-in prompt must never open.
+        Mock Select-LauncherAzureSignIn { $true }
+    }
+
     It 'selects the public TUI function file, not the old WPF application' {
         $target = Get-LauncherTarget -Tool FinOps -Configuration $config
         $target.Script | Should -Be $starter
+        $target.Function | Should -Be 'Start-FinOpsExplorer'
         $target.Script | Should -Not -Match 'AzureFinOpsScanner'
     }
 
@@ -238,6 +244,140 @@ $env:LAUNCHER_TEST_REPO = $RepoRoot
         $location = Get-Location
         { Invoke-LauncherTool -Tool ALZ -Target @{ Script = $bad } } | Should -Throw '*Tool failed*'
         (Get-Location).Path | Should -Be $location.Path
+    }
+
+    It 'asks which Azure sign-in to use only for the live TUI and FTKLocal' {
+        Mock Write-Host {}
+        $demo = New-TestToolFile (Join-Path $TestDrive 'ask\Start-DemoEnvironment.ps1') 'param([string]$RepoRoot)'
+        try {
+            Invoke-LauncherTool -Tool FinOps -Target (Get-LauncherTarget -Tool FinOps -Configuration $config)
+            Invoke-LauncherTool -Tool FTKLocal -Target @{ Script = $demo; ToolkitRoot = $config.FinOpsToolkitRoot }
+            Should -Invoke Select-LauncherAzureSignIn -Times 2 -Exactly
+            Invoke-LauncherTool -Tool FinOpsDemo -Target (Get-LauncherTarget -Tool FinOpsDemo -Configuration $config)
+            Invoke-LauncherTool -Tool ALZ -Target (Get-LauncherTarget -Tool ALZ -Configuration $config)
+            Invoke-LauncherTool -Tool ResourceTagger -Target (Get-LauncherTarget -Tool ResourceTagger -Configuration $config)
+            Should -Invoke Select-LauncherAzureSignIn -Times 2 -Exactly
+        }
+        finally {
+            $env:LAUNCHER_TEST_TUI = $null
+            $env:LAUNCHER_TEST_HUB = $null
+            $env:LAUNCHER_TEST_DEMO = $null
+        }
+    }
+
+    It 'starts nothing when the sign-in prompt is cancelled' {
+        Mock Select-LauncherAzureSignIn { $false }
+        Mock Write-Host {}
+        $demo = New-TestToolFile (Join-Path $TestDrive 'cancel\Start-DemoEnvironment.ps1') "`$env:LAUNCHER_TEST_REPO = 'started'"
+        try {
+            Invoke-LauncherTool -Tool FinOps -Target (Get-LauncherTarget -Tool FinOps -Configuration $config)
+            Invoke-LauncherTool -Tool FTKLocal -Target @{ Script = $demo; ToolkitRoot = $config.FinOpsToolkitRoot }
+            $env:LAUNCHER_TEST_TUI | Should -BeNullOrEmpty
+            $env:LAUNCHER_TEST_REPO | Should -BeNullOrEmpty
+            Should -Invoke Write-Host -ParameterFilter { $Object -like '*Cancelled*' } -Times 2 -Exactly
+        }
+        finally {
+            $env:LAUNCHER_TEST_TUI = $null
+            $env:LAUNCHER_TEST_REPO = $null
+        }
+    }
+}
+
+Describe 'Azure sign-in selection' {
+    BeforeAll {
+        function New-TestAzureContext {
+            param([string]$Name, [string]$Account, [string]$Tenant, [string]$HomeTenant)
+            [pscustomobject]@{
+                Name    = $Name
+                Account = [pscustomobject]@{
+                    Id                 = $Account
+                    ExtendedProperties = if ($HomeTenant) { @{ HomeAccountId = "00000000-0000-0000-0000-000000000000.$HomeTenant" } } else { @{} }
+                }
+                Tenant  = [pscustomobject]@{ Id = $Tenant }
+            }
+        }
+        $tenantA = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        $tenantB = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+        $tenantC = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+        $customer = New-TestAzureContext 'customer-1' 'customer-account' $tenantA $tenantA
+        $customerSecond = New-TestAzureContext 'customer-2' 'customer-account' $tenantA $tenantA
+        # The guest context sorts first by name, so only the home-tenant rule can pick the work context.
+        $guest = New-TestAzureContext 'guest-1' 'work-account' $tenantC $tenantB
+        $work = New-TestAzureContext 'work-1' 'work-account' $tenantB $tenantB
+    }
+
+    It 'lists one choice per account in a stable order and marks the saved default' {
+        $choices = @(Get-LauncherSignInChoice -Context @($work, $guest, $customerSecond, $customer) -Default $customerSecond)
+        ($choices.Account -join '|') | Should -Be 'customer-account|work-account'
+        ($choices.IsDefault -join '|') | Should -Be 'True|False'
+        $choices[0].Context.Name | Should -Be 'customer-2'
+    }
+
+    It 'starts a non-default account in its home tenant when that context is saved' {
+        $choices = @(Get-LauncherSignInChoice -Context @($guest, $work) -Default $customer)
+        $choices.Count | Should -Be 1
+        $choices[0].Context.Name | Should -Be 'work-1'
+        $choices[0].IsDefault | Should -BeFalse
+    }
+
+    It 'falls back to the first saved context when the home tenant has none' {
+        $choices = @(Get-LauncherSignInChoice -Context @($guest) -Default $null)
+        $choices[0].Context.Name | Should -Be 'guest-1'
+    }
+
+    It 'copes with contexts that record no home tenant' {
+        $bare = New-TestAzureContext 'bare-1' 'bare-account' $tenantA
+        @(Get-LauncherSignInChoice -Context @($bare) -Default $null)[0].Context.Name | Should -Be 'bare-1'
+    }
+
+    Context 'prompting' {
+        BeforeEach {
+            $script:answers = [System.Collections.Generic.Queue[string]]::new()
+            $script:azure = [pscustomobject]@{ Default = $customer; All = @($customer, $work, $guest) }
+            Mock Write-Host {}
+            Mock Test-LauncherInteractive { $true }
+            Mock Get-LauncherAzureContext { $script:azure }
+            Mock Switch-LauncherAzureContext {}
+            Mock Read-LauncherChoice { $script:answers.Dequeue() }
+        }
+
+        It 'does not ask when the console is not interactive' {
+            Mock Test-LauncherInteractive { $false }
+            Select-LauncherAzureSignIn | Should -BeTrue
+            Should -Invoke Get-LauncherAzureContext -Times 0 -Exactly
+            Should -Invoke Read-LauncherChoice -Times 0 -Exactly
+        }
+
+        It 'does not ask when Az.Accounts is unavailable' {
+            $script:azure = $null
+            Select-LauncherAzureSignIn | Should -BeTrue
+            Should -Invoke Read-LauncherChoice -Times 0 -Exactly
+        }
+
+        It 'does not ask when every saved context belongs to one account, even across tenants' {
+            $script:azure = [pscustomobject]@{ Default = $work; All = @($work, $guest) }
+            Select-LauncherAzureSignIn | Should -BeTrue
+            Should -Invoke Read-LauncherChoice -Times 0 -Exactly
+        }
+
+        It 'keeps asking until a listed number is entered because Enter is not a default' {
+            foreach ($answer in @('', 'x', '0', '3', '1')) { $script:answers.Enqueue($answer) }
+            Select-LauncherAzureSignIn | Should -BeTrue
+            Should -Invoke Read-LauncherChoice -Times 5 -Exactly
+            Should -Invoke Switch-LauncherAzureContext -Times 0 -Exactly
+        }
+
+        It 'switches only this window to a different saved account' {
+            $script:answers.Enqueue('2')
+            Select-LauncherAzureSignIn | Should -BeTrue
+            Should -Invoke Switch-LauncherAzureContext -Times 1 -Exactly -ParameterFilter { $Context.Name -eq 'work-1' }
+        }
+
+        It 'cancels without switching when Q is entered' {
+            $script:answers.Enqueue('Q')
+            Select-LauncherAzureSignIn | Should -BeFalse
+            Should -Invoke Switch-LauncherAzureContext -Times 0 -Exactly
+        }
     }
 }
 
