@@ -14,7 +14,7 @@ is required.
 ## Prerequisites
 
 - Windows and **PowerShell 7.4+** (`pwsh`). ResourceTagger is a Windows WPF app;
-  the FinOps option uses the **terminal UI**, not the former WPF scanner.
+  the FinOps option uses the **terminal UI**.
 - An existing [ALZ AutoPilot](https://github.com/z-larsen/ALZ-AutoPilot)
   checkout, including `Start-ALZDelivery.ps1`.
 - The [standalone FinOps Explorer TUI preview](https://github.com/z-larsen/FinOps-Multitool-TUI)
@@ -25,8 +25,7 @@ is required.
   A source installation also works if it contains those files under `src\powershell`.
   The launcher prefers `Start-FinOpsExplorer.ps1` and falls back to the legacy
   `Start-FinOpsMultitool.ps1` entry point for older local installations. It recognizes
-  both layouts, preferring `src\powershell` when present; it does not fetch tools or
-  substitute the separate WPF/Desktop application.
+  both layouts, preferring `src\powershell` when present;   it does not fetch tools.
 - An existing [Azure ResourceTagger](https://github.com/z-larsen/AzureResourceTagger)
   checkout, including `Start-ResourceTagger.ps1`.
 - Each tool's own dependencies, Azure permissions and sign-in requirements.

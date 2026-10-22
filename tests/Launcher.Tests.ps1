@@ -89,7 +89,7 @@ Describe 'Tool resolution and execution' {
         Mock Select-LauncherAzureSignIn { $true }
     }
 
-    It 'selects the public TUI function file, not the old WPF application' {
+    It 'selects the public TUI function file' {
         $target = Get-LauncherTarget -Tool FinOps -Configuration $config
         $target.Script | Should -Be $starter
         $target.Function | Should -Be 'Start-FinOpsExplorer'
