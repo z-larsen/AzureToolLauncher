@@ -9,3 +9,6 @@
 !/docs/images/azure-tool-launcher.png
 !tests/
 !tests/Launcher.Tests.ps1
+!/.github/
+!/.github/workflows/
+!/.github/workflows/secret-scan.yml
